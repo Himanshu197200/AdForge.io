@@ -57,12 +57,6 @@ Built with **React.js, Express.js, Prisma, MySQL, and Google OAuth**, it demonst
   | Repo starred   | +1     |
   | Repo forked    | +3     |
 
-### 🧠 Additional Features
-
-* Markdown rendering for README files
-* Repository analytics (stars, forks, commits count)
-* Notifications for team activities
-* Responsive UI inspired by GitHub’s clean design
 
 ---
 
