@@ -432,3 +432,120 @@ exports.deleteEvent = async (req, res) => {
     }
 };
 
+
+exports.registerTeam = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user.id;
+        const { teamName, members, email, firstName, lastName, ...leaderDetails } = req.body;
+
+        if (!teamName) return res.status(400).json({ message: 'Team name is required' });
+
+        const event = await prisma.event.findUnique({
+            where: { id },
+            include: { registrations: true }
+        });
+
+        if (!event) return res.status(404).json({ message: 'Event not found' });
+        if (event.type !== 'TEAM') return res.status(400).json({ message: 'This is not a team event' });
+
+        if (new Date() > new Date(event.registrationDeadline)) {
+            return res.status(400).json({ message: 'Registration deadline passed' });
+        }
+
+        const newMemberCount = 1 + (members ? members.length : 0);
+        if (event.registrations.length + newMemberCount > event.maxParticipants) {
+            return res.status(400).json({ message: 'Not enough spots left in the event' });
+        }
+
+        // Check if leader already registered
+        const existingRegistration = await prisma.registration.findUnique({
+            where: {
+                userId_eventId: {
+                    userId,
+                    eventId: id
+                }
+            }
+        });
+
+        if (existingRegistration) {
+            return res.status(400).json({ message: 'You are already registered for this event' });
+        }
+
+        // Create Team
+        const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+        const team = await prisma.team.create({
+            data: {
+                name: teamName,
+                code,
+                eventId: id
+            }
+        });
+
+        // Register Leader
+        await prisma.registration.create({
+            data: {
+                userId,
+                eventId: id,
+                teamId: team.id,
+                ...leaderDetails
+            }
+        });
+
+        await prisma.teamMember.create({
+            data: {
+                teamId: team.id,
+                userId,
+                status: 'ACCEPTED'
+            }
+        });
+
+        // Register Members
+        if (members && members.length > 0) {
+            for (const member of members) {
+                const { email, firstName, lastName, ...memberDetails } = member;
+
+                let user = await prisma.user.findUnique({ where: { email } });
+                if (!user) {
+                    user = await prisma.user.create({
+                        data: {
+                            email,
+                            name: `${firstName} ${lastName}`,
+                            role: 'STUDENT'
+                        }
+                    });
+                }
+
+                // Check if member already registered
+                const memReg = await prisma.registration.findUnique({
+                    where: { userId_eventId: { userId: user.id, eventId: id } }
+                });
+
+                if (!memReg) {
+                    await prisma.registration.create({
+                        data: {
+                            userId: user.id,
+                            eventId: id,
+                            teamId: team.id,
+                            ...memberDetails
+                        }
+                    });
+
+                    await prisma.teamMember.create({
+                        data: {
+                            teamId: team.id,
+                            userId: user.id,
+                            status: 'ACCEPTED'
+                        }
+                    });
+                }
+            }
+        }
+
+        res.status(201).json({ message: 'Team registered successfully', team });
+
+    } catch (error) {
+        console.error('Team Registration Error:', error);
+        res.status(500).json({ message: error.message || 'Team registration failed' });
+    }
+};

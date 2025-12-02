@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, CheckCircle, AlertCircle, MapPin, Building, User, Phone, Mail, ArrowRight, Loader } from 'lucide-react';
+import { X, CheckCircle, AlertCircle, MapPin, Building, User, Phone, Mail, ArrowRight, Loader, Plus, Users } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
@@ -18,6 +18,12 @@ const RegistrationForm = ({ event, onClose, onSubmit, initialData = {} }) => {
         location: '',
         ...initialData
     });
+
+    // Team Registration State
+    const [isTeamRegistration, setIsTeamRegistration] = useState(false);
+    const [teamName, setTeamName] = useState('');
+    const [members, setMembers] = useState([]);
+
     const [errors, setErrors] = useState({});
     const [submitting, setSubmitting] = useState(false);
 
@@ -39,6 +45,23 @@ const RegistrationForm = ({ event, onClose, onSubmit, initialData = {} }) => {
         }
     };
 
+    // Team Member Handlers
+    const addMember = () => {
+        setMembers([...members, { firstName: '', lastName: '', email: '', mobile: '', gender: 'Male', type: 'College Student', organization: formData.organization || '', location: formData.location || '' }]);
+    };
+
+    const removeMember = (index) => {
+        const newMembers = [...members];
+        newMembers.splice(index, 1);
+        setMembers(newMembers);
+    };
+
+    const updateMember = (index, field, value) => {
+        const newMembers = [...members];
+        newMembers[index][field] = value;
+        setMembers(newMembers);
+    };
+
     const validate = () => {
         const newErrors = {};
         if (!formData.email) newErrors.email = 'Email is required';
@@ -47,6 +70,14 @@ const RegistrationForm = ({ event, onClose, onSubmit, initialData = {} }) => {
         if (!formData.gender) newErrors.gender = 'Gender is required';
         if (!formData.organization) newErrors.organization = 'Organization is required';
         if (!formData.location) newErrors.location = 'Location is required';
+
+        if (isTeamRegistration) {
+            if (!teamName.trim()) newErrors.teamName = 'Team name is required';
+            members.forEach((m, i) => {
+                if (!m.firstName) newErrors[`member_${i}_firstName`] = 'Required';
+                if (!m.email) newErrors[`member_${i}_email`] = 'Required';
+            });
+        }
 
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -61,16 +92,18 @@ const RegistrationForm = ({ event, onClose, onSubmit, initialData = {} }) => {
     const handleSubmitRegistration = async () => {
         setSubmitting(true);
         try {
-
-            if (user && user.email === formData.email) {
+            if (isTeamRegistration) {
+                await api.post(`/events/${event.id}/register-team`, {
+                    ...formData,
+                    teamName,
+                    members
+                });
+            } else if (user && user.email === formData.email) {
                 await api.post(`/events/${event.id}/register`, formData);
             } else {
-
                 const response = await api.post(`/events/${event.id}/register-public`, {
                     ...formData
                 });
-
-
             }
 
             setStep(3);
@@ -122,7 +155,25 @@ const RegistrationForm = ({ event, onClose, onSubmit, initialData = {} }) => {
                 <div className="p-6 overflow-y-auto custom-scrollbar">
                     <form onSubmit={handleNext} className="space-y-6">
 
-
+                        {event.type === 'TEAM' && (
+                            <div className="bg-primary-50 p-4 rounded-xl border border-primary-100 mb-6">
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <div className={`w-6 h-6 rounded border flex items-center justify-center transition-colors ${isTeamRegistration ? 'bg-primary-600 border-primary-600' : 'bg-white border-gray-300'}`}>
+                                        {isTeamRegistration && <CheckCircle size={16} className="text-white" />}
+                                    </div>
+                                    <input
+                                        type="checkbox"
+                                        checked={isTeamRegistration}
+                                        onChange={(e) => setIsTeamRegistration(e.target.checked)}
+                                        className="hidden"
+                                    />
+                                    <div>
+                                        <span className="font-bold text-gray-900 block">Register as a Team</span>
+                                        <span className="text-xs text-gray-500">Create a team and add members now</span>
+                                    </div>
+                                </label>
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
@@ -171,6 +222,7 @@ const RegistrationForm = ({ event, onClose, onSubmit, initialData = {} }) => {
                                     onChange={handleChange}
                                     className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all"
                                     placeholder="John"
+                                    disabled={isTeamRegistration && members.length > 0} // Optional: lock leader name if team logic is complex, but keeping editable is fine
                                 />
                                 {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
                             </div>
@@ -296,6 +348,103 @@ const RegistrationForm = ({ event, onClose, onSubmit, initialData = {} }) => {
                             {errors.location && <p className="text-red-500 text-xs mt-1">{errors.location}</p>}
                         </div>
 
+                        {/* Team Details Section */}
+                        {isTeamRegistration && (
+                            <div className="space-y-6 pt-6 border-t border-gray-100 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Users className="text-primary-600" size={24} />
+                                    <h3 className="text-lg font-bold text-gray-900">Team Details</h3>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-1">Team Name <span className="text-red-500">*</span></label>
+                                    <input
+                                        type="text"
+                                        value={teamName}
+                                        onChange={(e) => setTeamName(e.target.value)}
+                                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none transition-all"
+                                        placeholder="Enter team name"
+                                    />
+                                    {errors.teamName && <p className="text-red-500 text-xs mt-1">{errors.teamName}</p>}
+                                </div>
+
+                                <div>
+                                    <div className="flex justify-between items-center mb-4">
+                                        <label className="block text-sm font-bold text-gray-700">Team Members</label>
+                                        <button
+                                            type="button"
+                                            onClick={addMember}
+                                            className="flex items-center gap-1 text-sm text-primary-600 font-bold hover:text-primary-700 bg-primary-50 px-3 py-1.5 rounded-lg border border-primary-100 transition-colors"
+                                        >
+                                            <Plus size={16} />
+                                            Add Member
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        {members.map((member, index) => (
+                                            <div key={index} className="p-4 bg-gray-50 rounded-xl border border-gray-200 relative group">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => removeMember(index)}
+                                                    className="absolute right-2 top-2 p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all opacity-0 group-hover:opacity-100"
+                                                >
+                                                    <X size={16} />
+                                                </button>
+                                                <h4 className="text-xs font-bold text-gray-500 uppercase mb-3 flex items-center gap-2">
+                                                    <span className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-[10px]">{index + 1}</span>
+                                                    Member Details
+                                                </h4>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                    <div>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="First Name"
+                                                            value={member.firstName}
+                                                            onChange={(e) => updateMember(index, 'firstName', e.target.value)}
+                                                            className={`w-full px-3 py-2 rounded-lg border ${errors[`member_${index}_firstName`] ? 'border-red-300 bg-red-50' : 'border-gray-200'} text-sm focus:border-primary-500 outline-none`}
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <input
+                                                            type="text"
+                                                            placeholder="Last Name"
+                                                            value={member.lastName}
+                                                            onChange={(e) => updateMember(index, 'lastName', e.target.value)}
+                                                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-primary-500 outline-none"
+                                                        />
+                                                    </div>
+                                                    <div className="md:col-span-2">
+                                                        <input
+                                                            type="email"
+                                                            placeholder="Email Address"
+                                                            value={member.email}
+                                                            onChange={(e) => updateMember(index, 'email', e.target.value)}
+                                                            className={`w-full px-3 py-2 rounded-lg border ${errors[`member_${index}_email`] ? 'border-red-300 bg-red-50' : 'border-gray-200'} text-sm focus:border-primary-500 outline-none`}
+                                                        />
+                                                    </div>
+                                                    <div className="md:col-span-2">
+                                                        <input
+                                                            type="tel"
+                                                            placeholder="Mobile Number"
+                                                            value={member.mobile}
+                                                            onChange={(e) => updateMember(index, 'mobile', e.target.value)}
+                                                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm focus:border-primary-500 outline-none"
+                                                        />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {members.length === 0 && (
+                                            <div className="text-center py-6 text-gray-400 text-sm bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                                                No members added yet
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
 
                         {errors.submit && (
                             <div className="bg-red-50 text-red-600 p-3 rounded-xl flex items-center gap-2 text-sm">
@@ -321,7 +470,7 @@ const RegistrationForm = ({ event, onClose, onSubmit, initialData = {} }) => {
                         >
                             {submitting ? 'Processing...' : (
                                 <>
-                                    Continue
+                                    {isTeamRegistration ? 'Register Team' : 'Register Now'}
                                     <ArrowRight size={20} />
                                 </>
                             )}
